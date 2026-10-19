@@ -78,8 +78,18 @@ creating a terminal event, so an acknowledgement racing a cascade cannot emit a
 second terminal event for a resource already finalized by the cascade. The
 coordination is wired only when `--consumer-delete-cascade` is enabled: with the
 flag off, terminal acknowledgements keep the pre-cascade behaviour and take no
-per-consumer lock. All servers must use this coordination code before enabling
-the flag; it cannot coordinate older binaries during a mixed-version rollout.
+per-consumer lock. It cannot coordinate older binaries during a mixed-version
+rollout.
+
+**Enabling and disabling the flag is rollout-ordered, and upgrading every
+replica is not sufficient on its own.** A replica with the flag still off
+bypasses the consumer advisory lock, so an acknowledgement processed by a
+flag-off replica can race a cascade on a flag-on replica and emit a duplicate
+terminal event. Do not issue cascade deletes until the flag is enabled on every
+replica and the last flag-off instances — including their in-flight
+acknowledgement handlers — have drained. Do not issue cascade deletes during a
+rolling disablement either, for the same reason: while any replica still serves
+acknowledgements without the lock, a cascade can race it.
 
 The advisory lock is taken on the database transaction that performs the
 protected reads and writes, and is released when that transaction commits or
